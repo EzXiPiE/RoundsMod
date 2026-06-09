@@ -79,8 +79,8 @@ namespace MyFirstRoundsMod
                     Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
                     texture.LoadImage(buffer);
                     texture.filterMode = FilterMode.Point; // Сохраняем пиксели четкими, убирая размытие Unity
-                    
-                                        texture.wrapMode = TextureWrapMode.Clamp;
+
+                    texture.wrapMode = TextureWrapMode.Clamp;
                     return texture;
                 }
             }
@@ -379,11 +379,13 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
         private bool isCooldown = false;
         private const float CooldownDuration = 5f;
 
+        // --- ИСПРАВЛЕНИЕ: Ссылка на запущенную корутину для её принудительной остановки ---
+        private Coroutine activeHoleCoroutine;
+
         public void SetupBlackHole(Player player, Block block)
         {
             cachedPlayer = player;
             photonView = player.GetComponent<PhotonView>();
-
             if (cachedBlock != null)
                 cachedBlock.BlockAction -= OnBlockActivated;
             cachedBlock = block;
@@ -397,6 +399,9 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
         {
             if (triggerType != BlockTrigger.BlockTriggerType.Default || isCooldown) return;
             if (photonView != null && !photonView.IsMine) return;
+
+            // --- ИСПРАВЛЕНИЕ: Защита от прожатия блока мертвым игроком ---
+            if (cachedPlayer == null || cachedPlayer.data == null || cachedPlayer.data.dead) return;
 
             if (MainCam.instance != null && MainCam.instance.cam != null)
             {
@@ -424,7 +429,9 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
                 Vector3 spawnPos = (Vector3)data[1];
                 if (photonView != null && photonView.ViewID == targetViewID)
                 {
-                    StartCoroutine(SpawnBlackHoleRoutine(spawnPos));
+                    // --- ИСПРАВЛЕНИЕ: Перезапуск корутины с сохранением ссылки ---
+                    if (activeHoleCoroutine != null) StopCoroutine(activeHoleCoroutine);
+                    activeHoleCoroutine = StartCoroutine(SpawnBlackHoleRoutine(spawnPos));
                 }
             }
         }
@@ -438,40 +445,38 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
 
         private IEnumerator SpawnBlackHoleRoutine(Vector3 center)
         {
-            // --- ИЗМЕНЕННЫЙ БЛОК: Динамический масштаб круга зарядки ---
-            // Считываем базовый масштаб игрока (или берем единичный, если игрока нет)
             Vector3 playerScale = cachedPlayer != null ? cachedPlayer.transform.localScale : Vector3.one;
 
-            // Вычисляем масштаб круга: размер игрока + фиксированный отступ по осям X и Y.
-            // Значение 0.6f подобрано так, чтобы круг был в два раза меньше исходного, 
-            // но сохранял пропорциональный видимый зазор вокруг игрока любого масштаба.
             float adaptiveScaleX = playerScale.x + 0.6f;
             float adaptiveScaleY = playerScale.y + 0.6f;
 
-            // Создаем круг с начальными координатами
             GameObject chargingVisual = CreateDetachedCircle(transform.position, new Color(0.8f, 0f, 0.8f, 0.9f), 1f);
             if (chargingVisual != null)
             {
                 chargingVisual.transform.localScale = new Vector3(adaptiveScaleX, adaptiveScaleY, 1f);
             }
-
             float chargeEndTime = Time.time + 1f;
             while (Time.time < chargeEndTime)
             {
+                // --- ИСПРАВЛЕНИЕ: Проверка на смерть во время зарядки ---
+                if (cachedPlayer == null || cachedPlayer.data == null || cachedPlayer.data.dead)
+                {
+                    if (chargingVisual != null) Destroy(chargingVisual);
+                    activeHoleCoroutine = null;
+                    yield break;
+                }
+
                 if (chargingVisual != null && cachedPlayer != null)
                 {
                     chargingVisual.transform.position = cachedPlayer.transform.position;
-
-                    // Постоянно обновляем масштаб на случай, если игрок изменил размер прямо во время зарядки
                     Vector3 currentScale = cachedPlayer.transform.localScale;
                     chargingVisual.transform.localScale = new Vector3(currentScale.x + 0.6f, currentScale.y + 0.6f, 1f);
                 }
                 yield return null;
             }
-            if (chargingVisual != null) Destroy(chargingVisual);
-            // --- КОНЕЦ ИЗМЕНЕННОГО БЛОКА ---
 
-            // 2. Параметры дыры (ОСТАВЛЕНО БЕЗ ИЗМЕНЕНИЙ)
+            if (chargingVisual != null) Destroy(chargingVisual);
+
             float holeVisualScale = 4.0f;
             float damageRadius = 1.8f;
             float pullRadius = 28f;
@@ -486,6 +491,14 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
 
             while (Time.time - startTime < duration)
             {
+                // --- ИСПРАВЛЕНИЕ: Проверка на смерть во время работы дыры ---
+                if (cachedPlayer == null || cachedPlayer.data == null || cachedPlayer.data.dead)
+                {
+                    if (holeVisual != null) Destroy(holeVisual);
+                    activeHoleCoroutine = null;
+                    yield break;
+                }
+
                 Collider2D[] colliders = Physics2D.OverlapCircleAll(center, pullRadius);
                 foreach (var col in colliders)
                 {
@@ -493,10 +506,8 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
                     Vector2 direction = (Vector2)center - (Vector2)col.transform.position;
                     float distance = direction.magnitude;
                     if (distance < 0.3f) continue;
-
                     float forceFactor = Mathf.Clamp01(1f - (distance / pullRadius));
 
-                    // 1. ПРОВЕРКА НА ИГРОКА
                     Player player = col.GetComponent<Player>();
                     if (player != null && player.data != null && !player.data.dead)
                     {
@@ -505,17 +516,16 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
                         continue;
                     }
 
-                    // 2. ПРОВЕРКА НА ДИНАМИЧЕСКИЕ ОБЪЕКТЫ
                     Rigidbody2D rb = col.GetComponent<Rigidbody2D>();
                     if (rb != null && rb.bodyType != RigidbodyType2D.Static)
                     {
+                        // Оставлено как в чистом коде: исходная сила и смещение коробок
                         rb.AddForce(direction.normalized * forceFactor * pullForce * 8f, ForceMode2D.Force);
                         float moveDist = pullForce * forceFactor * Time.deltaTime * 2f;
                         col.transform.position += (Vector3)direction.normalized * moveDist;
                     }
                 }
 
-                // === ПЕРИОДИЧЕСКИЙ УРОН ===
                 if (Time.time >= lastDamageTime + damageInterval)
                 {
                     lastDamageTime = Time.time;
@@ -537,11 +547,11 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
                 }
                 yield return null;
             }
+
             if (holeVisual != null) Destroy(holeVisual);
+            activeHoleCoroutine = null;
         }
 
-
-        // Создаёт отдельный круг (не дочерний) – для зарядки
         private GameObject CreateDetachedCircle(Vector3 pos, Color color, float scale)
         {
             GameObject visual = new GameObject("BlackHoleCharging");
@@ -549,12 +559,11 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
             SpriteRenderer sprite = visual.AddComponent<SpriteRenderer>();
             sprite.sprite = VisualCircleGenerator.GetCircle();
             sprite.color = color;
-            sprite.sortingOrder = 200;      // высокий порядок отрисовки
+            sprite.sortingOrder = 200;
             visual.transform.localScale = new Vector3(scale, scale, 1f);
             return visual;
         }
 
-        // Создаёт статический круг в точке – для самой дыры
         private GameObject CreateStaticCircle(Vector3 pos, Color color, float scale)
         {
             GameObject visual = new GameObject("BlackHoleVisual");
@@ -577,6 +586,21 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
             Destroy(flash, 0.1f);
         }
 
+        // --- ИСПРАВЛЕНИЕ: Автоматический сброс корутины и очистка кругов при смерти/смене раунда ---
+        private void OnDisable()
+        {
+            if (activeHoleCoroutine != null)
+            {
+                StopCoroutine(activeHoleCoroutine);
+                activeHoleCoroutine = null;
+            }
+            GameObject oldCharging = GameObject.Find("BlackHoleCharging");
+            if (oldCharging != null) Destroy(oldCharging);
+            GameObject oldVisual = GameObject.Find("BlackHoleVisual");
+            if (oldVisual != null) Destroy(oldVisual);
+            isCooldown = false;
+        }
+
         void OnDestroy()
         {
             PhotonNetwork.RemoveCallbackTarget(this);
@@ -584,6 +608,7 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
                 cachedBlock.BlockAction -= OnBlockActivated;
         }
     }
+
 
 
 
@@ -595,12 +620,12 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
             cardInfo.allowMultiple = false; // <--- СЮДА! 
         }
 
-        public override void OnAddCard(Player player, Gun gun, GunAmmo gunAmmo,CharacterData data, HealthHandler health, Gravity gravity, Block block,CharacterStatModifiers stats)
+        public override void OnAddCard(Player player, Gun gun, GunAmmo gunAmmo, CharacterData data, HealthHandler health, Gravity gravity, Block block, CharacterStatModifiers stats)
         {
             if (player == null || player.gameObject == null) return;
 
             stats.health *= 0.85f;
-            TimeTrackerComponent timeTracker =player.gameObject.GetComponent<TimeTrackerComponent>() ??player.gameObject.AddComponent<TimeTrackerComponent>();
+            TimeTrackerComponent timeTracker = player.gameObject.GetComponent<TimeTrackerComponent>() ?? player.gameObject.AddComponent<TimeTrackerComponent>();
             timeTracker.SetupTracker(player, health, gunAmmo, block);
         }
 
@@ -621,9 +646,9 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
         }
 
         protected override string GetTitle() => "CONTROL TIME";
-        protected override string GetDescription() => "Activating your block instantly rewinds you 5 seconds into the past, restoring your exact HP and Ammo from that moment!"; 
+        protected override string GetDescription() => "Activating your block instantly rewinds you 5 seconds into the past, restoring your exact HP and Ammo from that moment!";
         protected override CardInfo.Rarity GetRarity() => CardInfo.Rarity.Rare;
-        protected override CardThemeColor.CardThemeColorType GetTheme() =>CardThemeColor.CardThemeColorType.ColdBlue;
+        protected override CardThemeColor.CardThemeColorType GetTheme() => CardThemeColor.CardThemeColorType.ColdBlue;
         protected override GameObject GetCardArt()
         {
             MyFirstRoundsMod.MyMod.RefreshCardSprite();
@@ -635,7 +660,7 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
             image.color = new Color(0.65f, 0.65f, 0.65f, 1f); // Затемнение под Bloom 
 
             // --- ДОБАВЬТЕ ЭТОТ КУСОК ДЛЯ РАСТЯГИВАНИЯ КАРТИНКИ --- 
-            RectTransform rect = artObj.GetComponent<RectTransform>() ??artObj.AddComponent<RectTransform>();
+            RectTransform rect = artObj.GetComponent<RectTransform>() ?? artObj.AddComponent<RectTransform>();
             rect.anchorMin = new Vector2(0f, 0f); // Привязка к левому нижнему углу 
             rect.anchorMax = new Vector2(1f, 1f); // Привязка к правому верхнему углу 
             rect.offsetMin = new Vector2(0f, 0f); // Отступ снизу и слева 
@@ -850,12 +875,12 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
     public class SatelliteCard : CustomCard
     {
 
-        public override void SetupCard(CardInfo cardInfo, Gun gun, ApplyCardStats cardStats,CharacterStatModifiers statModifiers, Block block)
+        public override void SetupCard(CardInfo cardInfo, Gun gun, ApplyCardStats cardStats, CharacterStatModifiers statModifiers, Block block)
         {
             cardInfo.allowMultiple = false;
         }
 
-        public override void OnAddCard(Player player, Gun gun, GunAmmo gunAmmo,CharacterData data, HealthHandler health, Gravity gravity, Block block,CharacterStatModifiers characterStats)
+        public override void OnAddCard(Player player, Gun gun, GunAmmo gunAmmo, CharacterData data, HealthHandler health, Gravity gravity, Block block, CharacterStatModifiers characterStats)
         {
             if (player == null || player.gameObject == null) return;
 
@@ -866,9 +891,9 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
 
 
 
-        public override void OnRemoveCard(Player player, Gun gun, GunAmmo gunAmmo,CharacterData data, HealthHandler health, Gravity gravity, Block block,CharacterStatModifiers characterStats)
+        public override void OnRemoveCard(Player player, Gun gun, GunAmmo gunAmmo, CharacterData data, HealthHandler health, Gravity gravity, Block block, CharacterStatModifiers characterStats)
         {
-            SatelliteShieldMono component =player.gameObject.GetComponent<SatelliteShieldMono>();
+            SatelliteShieldMono component = player.gameObject.GetComponent<SatelliteShieldMono>();
             if (component != null)
             {
                 Destroy(component);
@@ -876,9 +901,9 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
         }
 
         protected override string GetTitle() => "SATELLITE GUARD";
-        protected override string GetDescription() => "Spawns 3 orbital satellites. Each satellite completely absorbs ONE instance of ANY lethal damage."; 
+        protected override string GetDescription() => "Spawns 3 orbital satellites. Each satellite completely absorbs ONE instance of ANY lethal damage.";
         protected override CardInfo.Rarity GetRarity() => CardInfo.Rarity.Rare;
-        protected override CardThemeColor.CardThemeColorType GetTheme() =>CardThemeColor.CardThemeColorType.DestructiveRed;
+        protected override CardThemeColor.CardThemeColorType GetTheme() => CardThemeColor.CardThemeColorType.DestructiveRed;
         protected override GameObject GetCardArt()
         {
             MyFirstRoundsMod.MyMod.RefreshCardSprite();
@@ -890,7 +915,7 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
             image.color = new Color(0.65f, 0.65f, 0.65f, 1f); // Затемнение под Bloom 
 
             // --- ДОБАВЬТЕ ЭТОТ КУСОК ДЛЯ РАСТЯГИВАНИЯ КАРТИНКИ --- 
-            RectTransform rect = artObj.GetComponent<RectTransform>() ??artObj.AddComponent<RectTransform>();
+            RectTransform rect = artObj.GetComponent<RectTransform>() ?? artObj.AddComponent<RectTransform>();
             rect.anchorMin = new Vector2(0f, 0f); // Привязка к левому нижнему углу 
             rect.anchorMax = new Vector2(1f, 1f); // Привязка к правому верхнему углу 
             rect.offsetMin = new Vector2(0f, 0f); // Отступ снизу и слева 
@@ -946,7 +971,7 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
 
             if (data != null) lastFrameHealth = data.health;
 
-            UnboundLib.GameModes.GameModeManager.AddHook("PointStart",OnRoundStart);
+            UnboundLib.GameModes.GameModeManager.AddHook("PointStart", OnRoundStart);
             ResetAndSpawnSatellites();
         }
 
@@ -999,9 +1024,9 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
                         object[] content = new object[] { view.ViewID, data.maxHealth, Time.time };
                         RaiseEventOptions raiseEventOptions = new RaiseEventOptions
                         {
-                            Receivers =ReceiverGroup.All
+                            Receivers = ReceiverGroup.All
                         };
-                        PhotonNetwork.RaiseEvent(SatelliteSyncEventCode, content,raiseEventOptions, SendOptions.SendReliable);
+                        PhotonNetwork.RaiseEvent(SatelliteSyncEventCode, content, raiseEventOptions, SendOptions.SendReliable);
                     }
                 }
             }
@@ -1020,7 +1045,7 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
                 if (satellites[i] == null) continue;
                 float currentAngle = (Time.time * rotationSpeed) + (i * angleStep);
                 float rad = currentAngle * Mathf.Deg2Rad;
-                Vector3 offset = new Vector3(Mathf.Cos(rad) * orbitRadius, Mathf.Sin(rad) *orbitRadius, 0f);
+                Vector3 offset = new Vector3(Mathf.Cos(rad) * orbitRadius, Mathf.Sin(rad) * orbitRadius, 0f);
                 satellites[i].transform.position = transform.position + offset;
             }
         }
@@ -1084,7 +1109,7 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
         void OnDestroy()
         {
             PhotonNetwork.RemoveCallbackTarget(this); // Обязательно отключаем слушатель сети
-            UnboundLib.GameModes.GameModeManager.RemoveHook("PointStart",OnRoundStart);
+            UnboundLib.GameModes.GameModeManager.RemoveHook("PointStart", OnRoundStart);
             foreach (var sat in satellites) { if (sat != null) Destroy(sat); }
         }
     }

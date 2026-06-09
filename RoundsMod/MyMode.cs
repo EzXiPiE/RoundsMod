@@ -479,8 +479,7 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
             // --- НАСТРОЙКИ ЧЕРНОЙ ДЫРЫ ---
             float holeVisualScale = 4.0f;
             float damageRadius = 1.8f;
-            float pullRadius = 16f;       // Ограничил радиус (было 28 — это на всю карту, ломало спавны)
-            float pullForce = 35f;        // Сила притягивания для физики
+            float pullRadius = 28f;       // Ограничил радиус (было 28 — это на всю карту, ломало спавны)
             float duration = 3f;
             float damageInterval = 0.2f;
             float damagePercent = 0.02f;
@@ -510,34 +509,37 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
                     // Защита от деления на ноль и дерганья в самом центре
                     if (distance < 0.2f) continue;
 
-                    // Сила нарастает ближе к центру
+                    // Сила нарастает ближе к центру (от 0.0 до 1.0)
                     float forceFactor = Mathf.Clamp01(1f - (distance / pullRadius));
 
-                    // 1. ОБРАБОТКА ИГРОКОВ (Идеально для онлайна и локального игрока)
+                    // 1. ОБРАБОТКА ИГРОКОВ
                     Player targetPlayer = col.GetComponent<Player>();
                     if (targetPlayer != null && targetPlayer.data != null && !targetPlayer.data.dead)
                     {
-                        // Проверка Photon: силу к игроку КРАЙНЕ ВАЖНО применять ТОЛЬКО на его стороне (IsMine),
-                        // а Photon уже сам синхронизирует его позицию со всеми остальными.
                         if (targetPlayer.data.view != null && targetPlayer.data.view.IsMine)
                         {
-                            // Используем родной метод ROUNDS для получения внешних сил. 
-                            // Он пробивает управление игрока и плавно тащит его в центр.
-                            Vector2 pullVector = direction.normalized * forceFactor * pullForce * 1.5f;
-                            targetPlayer.data.healthHandler.TakeForce(pullVector, ForceMode2D.Force);
+                            // --- НАСТРОЙКА ПРИТЯЖЕНИЯ ИГРОКА ---
+                            float playerPullForce = 20f;
+
+                            float step = playerPullForce * forceFactor * Time.deltaTime;
+                            Vector3 nextPosition = targetPlayer.transform.position + (Vector3)direction.normalized * step;
+
+                            targetPlayer.transform.position = nextPosition;
                         }
-                        continue; // Переходим к следующему объекту
+                        continue;
                     }
 
                     // 2. ОБРАБОТКА СТАТИЧЕСКИХ / ДИНАМИЧЕСКИХ КОРОБОК И ОБЪЕКТОВ MAP
                     Rigidbody2D rb = col.GetComponent<Rigidbody2D>();
                     if (rb != null && rb.bodyType == RigidbodyType2D.Dynamic)
                     {
-                        // В ROUNDS физика коробок контролируется Мастером Комнаты (Master Client).
-                        // Применяем силу к коробкам только на MasterClient, чтобы избежать десинхронизации и "дерганья" в онлайне.
                         if (PhotonNetwork.IsMasterClient)
                         {
-                            rb.AddForce(direction.normalized * forceFactor * pullForce * rb.mass * 0.8f, ForceMode2D.Force);
+                            // --- НАСТРОЙКА ПРИТЯЖЕНИЯ ОБЪЕКТОВ ---
+                            // Снизил силу, чтобы коробки не улетали мгновенно, а плавно затягивались
+                            float objectPullForce = 15f;
+
+                            rb.AddForce(direction.normalized * forceFactor * objectPullForce * rb.mass, ForceMode2D.Force);
                         }
                         continue;
                     }
@@ -546,10 +548,17 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
                     MoveTransform bullet = col.GetComponent<MoveTransform>();
                     if (bullet != null)
                     {
-                        // Пули искривляются локально на каждом клиенте, что создает идеальный визуал без задержек сети
-                        float bulletPullIntensity = forceFactor * 0.25f;
-                        bullet.velocity = Vector3.Lerp(bullet.velocity, (Vector3)direction.normalized * bullet.velocity.magnitude, bulletPullIntensity);
+                        // --- НАСТРОЙКА ПРИТЯЖЕНИЯ ПУЛЬ ---
+                        // Оставил среднее значение для красивого закручивания траектории
+                        float bulletPullForce = 25f;
+
+                        float bulletAttractionSpeed = forceFactor * bulletPullForce;
+                        Vector3 targetVelocity = (Vector3)direction.normalized * bullet.velocity.magnitude;
+                        bullet.velocity = Vector3.MoveTowards(bullet.velocity, targetVelocity, bulletAttractionSpeed * Time.deltaTime);
                     }
+
+
+
                 }
 
 

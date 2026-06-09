@@ -446,7 +446,6 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
         private IEnumerator SpawnBlackHoleRoutine(Vector3 center)
         {
             Vector3 playerScale = cachedPlayer != null ? cachedPlayer.transform.localScale : Vector3.one;
-
             float adaptiveScaleX = playerScale.x + 0.6f;
             float adaptiveScaleY = playerScale.y + 0.6f;
 
@@ -455,10 +454,10 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
             {
                 chargingVisual.transform.localScale = new Vector3(adaptiveScaleX, adaptiveScaleY, 1f);
             }
+
             float chargeEndTime = Time.time + 1f;
             while (Time.time < chargeEndTime)
             {
-                // --- ИСПРАВЛЕНИЕ: Проверка на смерть во время зарядки ---
                 if (cachedPlayer == null || cachedPlayer.data == null || cachedPlayer.data.dead)
                 {
                     if (chargingVisual != null) Destroy(chargingVisual);
@@ -477,10 +476,11 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
 
             if (chargingVisual != null) Destroy(chargingVisual);
 
+            // --- НАСТРОЙКИ ЧЕРНОЙ ДЫРЫ ---
             float holeVisualScale = 4.0f;
             float damageRadius = 1.8f;
-            float pullRadius = 28f;
-            float pullForce = 12f;
+            float pullRadius = 16f;       // Ограничил радиус (было 28 — это на всю карту, ломало спавны)
+            float pullForce = 35f;        // Сила притягивания для физики
             float duration = 3f;
             float damageInterval = 0.2f;
             float damagePercent = 0.02f;
@@ -491,7 +491,6 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
 
             while (Time.time - startTime < duration)
             {
-                // --- ИСПРАВЛЕНИЕ: Проверка на смерть во время работы дыры ---
                 if (cachedPlayer == null || cachedPlayer.data == null || cachedPlayer.data.dead)
                 {
                     if (holeVisual != null) Destroy(holeVisual);
@@ -499,33 +498,62 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
                     yield break;
                 }
 
+                // Ищем вообще ВСЕ коллайдеры в радиусе дыры
                 Collider2D[] colliders = Physics2D.OverlapCircleAll(center, pullRadius);
                 foreach (var col in colliders)
                 {
-                    if (col.gameObject == holeVisual) continue;
+                    if (col == null || col.gameObject == holeVisual) continue;
+
                     Vector2 direction = (Vector2)center - (Vector2)col.transform.position;
                     float distance = direction.magnitude;
-                    if (distance < 0.3f) continue;
+
+                    // Защита от деления на ноль и дерганья в самом центре
+                    if (distance < 0.2f) continue;
+
+                    // Сила нарастает ближе к центру
                     float forceFactor = Mathf.Clamp01(1f - (distance / pullRadius));
 
-                    Player player = col.GetComponent<Player>();
-                    if (player != null && player.data != null && !player.data.dead)
+                    // 1. ОБРАБОТКА ИГРОКОВ (Идеально для онлайна и локального игрока)
+                    Player targetPlayer = col.GetComponent<Player>();
+                    if (targetPlayer != null && targetPlayer.data != null && !targetPlayer.data.dead)
                     {
-                        float moveDist = pullForce * forceFactor * Time.deltaTime;
-                        player.transform.position += (Vector3)direction.normalized * moveDist;
+                        // Проверка Photon: силу к игроку КРАЙНЕ ВАЖНО применять ТОЛЬКО на его стороне (IsMine),
+                        // а Photon уже сам синхронизирует его позицию со всеми остальными.
+                        if (targetPlayer.data.view != null && targetPlayer.data.view.IsMine)
+                        {
+                            // Используем родной метод ROUNDS для получения внешних сил. 
+                            // Он пробивает управление игрока и плавно тащит его в центр.
+                            Vector2 pullVector = direction.normalized * forceFactor * pullForce * 1.5f;
+                            targetPlayer.data.healthHandler.TakeForce(pullVector, ForceMode2D.Force);
+                        }
+                        continue; // Переходим к следующему объекту
+                    }
+
+                    // 2. ОБРАБОТКА СТАТИЧЕСКИХ / ДИНАМИЧЕСКИХ КОРОБОК И ОБЪЕКТОВ MAP
+                    Rigidbody2D rb = col.GetComponent<Rigidbody2D>();
+                    if (rb != null && rb.bodyType == RigidbodyType2D.Dynamic)
+                    {
+                        // В ROUNDS физика коробок контролируется Мастером Комнаты (Master Client).
+                        // Применяем силу к коробкам только на MasterClient, чтобы избежать десинхронизации и "дерганья" в онлайне.
+                        if (PhotonNetwork.IsMasterClient)
+                        {
+                            rb.AddForce(direction.normalized * forceFactor * pullForce * rb.mass * 0.8f, ForceMode2D.Force);
+                        }
                         continue;
                     }
 
-                    Rigidbody2D rb = col.GetComponent<Rigidbody2D>();
-                    if (rb != null && rb.bodyType != RigidbodyType2D.Static)
+                    // 3. ОБРАБОТКА ПУЛЬ
+                    MoveTransform bullet = col.GetComponent<MoveTransform>();
+                    if (bullet != null)
                     {
-                        // Оставлено как в чистом коде: исходная сила и смещение коробок
-                        rb.AddForce(direction.normalized * forceFactor * pullForce * 8f, ForceMode2D.Force);
-                        float moveDist = pullForce * forceFactor * Time.deltaTime * 2f;
-                        col.transform.position += (Vector3)direction.normalized * moveDist;
+                        // Пули искривляются локально на каждом клиенте, что создает идеальный визуал без задержек сети
+                        float bulletPullIntensity = forceFactor * 0.25f;
+                        bullet.velocity = Vector3.Lerp(bullet.velocity, (Vector3)direction.normalized * bullet.velocity.magnitude, bulletPullIntensity);
                     }
                 }
 
+
+                // --- БЛОК НАНЕСЕНИЯ УРОНА (Оставлен без изменений) ---
                 if (Time.time >= lastDamageTime + damageInterval)
                 {
                     lastDamageTime = Time.time;
@@ -545,12 +573,14 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
                     }
                     CreateFlash(center);
                 }
+
                 yield return null;
             }
 
             if (holeVisual != null) Destroy(holeVisual);
             activeHoleCoroutine = null;
         }
+
 
         private GameObject CreateDetachedCircle(Vector3 pos, Color color, float scale)
         {

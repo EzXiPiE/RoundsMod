@@ -479,7 +479,7 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
             // --- НАСТРОЙКИ ЧЕРНОЙ ДЫРЫ ---
             float holeVisualScale = 4.0f;
             float damageRadius = 1.8f;
-            float pullRadius = 28f;       // Ограничил радиус (было 28 — это на всю карту, ломало спавны)
+            float pullRadius = 28f;
             float duration = 3f;
             float damageInterval = 0.2f;
             float damagePercent = 0.02f;
@@ -499,6 +499,7 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
 
                 // Ищем вообще ВСЕ коллайдеры в радиусе дыры
                 Collider2D[] colliders = Physics2D.OverlapCircleAll(center, pullRadius);
+
                 foreach (var col in colliders)
                 {
                     if (col == null || col.gameObject == holeVisual) continue;
@@ -520,10 +521,8 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
                         {
                             // --- НАСТРОЙКА ПРИТЯЖЕНИЯ ИГРОКА ---
                             float playerPullForce = 20f;
-
                             float step = playerPullForce * forceFactor * Time.deltaTime;
                             Vector3 nextPosition = targetPlayer.transform.position + (Vector3)direction.normalized * step;
-
                             targetPlayer.transform.position = nextPosition;
                         }
                         continue;
@@ -535,38 +534,22 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
                     {
                         if (PhotonNetwork.IsMasterClient)
                         {
-                            // --- НАСТРОЙКА ПРИТЯЖЕНИЯ ОБЪЕКТОВ ---
-                            // Снизил силу, чтобы коробки не улетали мгновенно, а плавно затягивались
-                            float objectPullForce = 15f;
-
-                            rb.AddForce(direction.normalized * forceFactor * objectPullForce * rb.mass, ForceMode2D.Force);
+                            // --- НАСТРОЙКА ПРИТЯЖЕНИЯ ОБЪЕКТОВ (ПО АНАЛОГИИ С ИГРОКОМ) ---
+                            float objectPullForce = 20f;
+                            float step = objectPullForce * forceFactor * Time.deltaTime;
+                            Vector2 nextPosition = rb.position + direction.normalized * step;
+                            rb.position = nextPosition;
                         }
                         continue;
                     }
-
-                    // 3. ОБРАБОТКА ПУЛЬ
-                    MoveTransform bullet = col.GetComponent<MoveTransform>();
-                    if (bullet != null)
-                    {
-                        // --- НАСТРОЙКА ПРИТЯЖЕНИЯ ПУЛЬ ---
-                        // Оставил среднее значение для красивого закручивания траектории
-                        float bulletPullForce = 25f;
-
-                        float bulletAttractionSpeed = forceFactor * bulletPullForce;
-                        Vector3 targetVelocity = (Vector3)direction.normalized * bullet.velocity.magnitude;
-                        bullet.velocity = Vector3.MoveTowards(bullet.velocity, targetVelocity, bulletAttractionSpeed * Time.deltaTime);
-                    }
-
-
-
                 }
-
 
                 // --- БЛОК НАНЕСЕНИЯ УРОНА (Оставлен без изменений) ---
                 if (Time.time >= lastDamageTime + damageInterval)
                 {
                     lastDamageTime = Time.time;
                     Collider2D[] damageColliders = Physics2D.OverlapCircleAll(center, damageRadius);
+
                     foreach (var col in damageColliders)
                     {
                         Player targetPlayer = col.GetComponent<Player>();
@@ -589,6 +572,7 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
             if (holeVisual != null) Destroy(holeVisual);
             activeHoleCoroutine = null;
         }
+
 
 
         private GameObject CreateDetachedCircle(Vector3 pos, Color color, float scale)

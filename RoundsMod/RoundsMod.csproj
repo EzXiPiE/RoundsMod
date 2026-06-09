@@ -46,6 +46,9 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\..\..\..\Rounds\Rounds_Data\Managed\Photon3Unity3D.dll</HintPath>
     </Reference>
+    <Reference Include="TurretsPhysicsPatch">
+      <HintPath>..\..\..\..\..\..\Rounds\BepInEx\plugins\TurretsPhysicsPatch.dll</HintPath>
+    </Reference>
     <Reference Include="UnityEngine.AssetBundleModule">
       <HintPath>$(SteamModdingPlayerDir)\ROUNDS\rounds_Data\Managed\UnityEngine.AssetBundleModule.dll</HintPath>
     </Reference>

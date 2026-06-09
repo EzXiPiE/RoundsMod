@@ -520,7 +520,7 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
                         if (targetPlayer.data.view != null && targetPlayer.data.view.IsMine)
                         {
                             // --- НАСТРОЙКА ПРИТЯЖЕНИЯ ИГРОКА ---
-                            float playerPullForce = 20f;
+                            float playerPullForce = 25f;
                             float step = playerPullForce * forceFactor * Time.deltaTime;
                             Vector3 nextPosition = targetPlayer.transform.position + (Vector3)direction.normalized * step;
                             targetPlayer.transform.position = nextPosition;
@@ -535,7 +535,7 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
                         if (PhotonNetwork.IsMasterClient)
                         {
                             // --- НАСТРОЙКА ПРИТЯЖЕНИЯ ОБЪЕКТОВ (ПО АНАЛОГИИ С ИГРОКОМ) ---
-                            float objectPullForce = 20f;
+                            float objectPullForce = 17f;
                             float step = objectPullForce * forceFactor * Time.deltaTime;
                             Vector2 nextPosition = rb.position + direction.normalized * step;
                             rb.position = nextPosition;

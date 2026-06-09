@@ -375,10 +375,9 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
         private Player cachedPlayer;
         private Block cachedBlock;
         private PhotonView photonView;
-
-        private const byte BlackHoleEventCode = 91; // Выделенный сетевой код события
+        private const byte BlackHoleEventCode = 91;
         private bool isCooldown = false;
-        private const float CooldownDuration = 3f;
+        private const float CooldownDuration = 5f;
 
         public void SetupBlackHole(Player player, Block block)
         {
@@ -386,42 +385,31 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
             photonView = player.GetComponent<PhotonView>();
 
             if (cachedBlock != null)
-            {
                 cachedBlock.BlockAction -= OnBlockActivated;
-            }
             cachedBlock = block;
             if (cachedBlock != null)
-            {
                 cachedBlock.BlockAction += OnBlockActivated;
-            }
         }
 
-        void Start()
-        {
-            PhotonNetwork.AddCallbackTarget(this);
-        }
+        void Start() => PhotonNetwork.AddCallbackTarget(this);
 
         private void OnBlockActivated(BlockTrigger.BlockTriggerType triggerType)
         {
-            if (triggerType == BlockTrigger.BlockTriggerType.Default && !isCooldown)
+            if (triggerType != BlockTrigger.BlockTriggerType.Default || isCooldown) return;
+            if (photonView != null && !photonView.IsMine) return;
+
+            if (MainCam.instance != null && MainCam.instance.cam != null)
             {
-                if (photonView != null && !photonView.IsMine) return;
-
-                if (MainCam.instance != null && MainCam.instance.cam != null)
-                {
-                    Vector3 targetPos = MainCam.instance.cam.ScreenToWorldPoint(Input.mousePosition);
-                    targetPos.z = 0f;
-
-                    SendBlackHoleSpawn(targetPos);
-                    StartCoroutine(StartCooldownRoutine());
-                }
+                Vector3 targetPos = MainCam.instance.cam.ScreenToWorldPoint(Input.mousePosition);
+                targetPos.z = 0f;
+                SendBlackHoleSpawn(targetPos);
+                StartCoroutine(StartCooldownRoutine());
             }
         }
 
         private void SendBlackHoleSpawn(Vector3 spawnPosition)
         {
             if (photonView == null) return;
-
             object[] content = new object[] { photonView.ViewID, spawnPosition };
             RaiseEventOptions raiseEventOptions = new RaiseEventOptions { Receivers = ReceiverGroup.All };
             PhotonNetwork.RaiseEvent(BlackHoleEventCode, content, raiseEventOptions, SendOptions.SendReliable);
@@ -432,18 +420,14 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
             if (photonEvent.Code == BlackHoleEventCode)
             {
                 object[] data = (object[])photonEvent.CustomData;
-
-                // ДОБАВИЛИ ИНДЕКСЫ [0] И, ЧТОБЫ ИЗВЛЕКАТЬ КОНКРЕТНЫЕ ДАННЫЕ ИЗ МАССИВА
                 int targetViewID = (int)data[0];
                 Vector3 spawnPos = (Vector3)data[1];
-
                 if (photonView != null && photonView.ViewID == targetViewID)
                 {
                     StartCoroutine(SpawnBlackHoleRoutine(spawnPos));
                 }
             }
         }
-
 
         private IEnumerator StartCooldownRoutine()
         {
@@ -454,93 +438,133 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
 
         private IEnumerator SpawnBlackHoleRoutine(Vector3 center)
         {
-            // Фаза 1: Зарядка (0.5 сек)
-            GameObject chargingVisual = CreateVisualCircle(transform.position, new Color(0.5f, 0f, 0.5f, 0.3f), 1.0f);
-            yield return new WaitForSeconds(0.5f);
+            // 1. Зарядка (1 сек) – круг вокруг игрока, не привязанный к родителю
+            GameObject chargingVisual = CreateDetachedCircle(transform.position, new Color(0.8f, 0f, 0.8f, 0.9f), 2.5f);
+            float chargeEndTime = Time.time + 1f;
+            while (Time.time < chargeEndTime)
+            {
+                if (chargingVisual != null && cachedPlayer != null)
+                    chargingVisual.transform.position = cachedPlayer.transform.position;
+                yield return null;
+            }
             if (chargingVisual != null) Destroy(chargingVisual);
 
-            // Фаза 2: Существование аномалии (2 секунды засасывания)
-            GameObject anomalyVisual = CreateVisualCircle(center, new Color(0.1f, 0f, 0.2f, 0.8f), 2.5f);
-            float duration = 2.0f;
-            float elapsed = 0f;
+            // 2. Параметры дыры
+            float holeVisualScale = 4.0f;
+            float damageRadius = 1.8f;
+            float pullRadius = 28f;
+            float pullForce = 12f;          // Сила притяжения (для прямого перемещения игроков)
+            float duration = 3f;
+            float damageInterval = 0.2f;
+            float damagePercent = 0.02f;    // 2% от макс ХП
 
-            while (elapsed < duration)
+            GameObject holeVisual = CreateStaticCircle(center, new Color(0.3f, 0f, 0.6f, 0.8f), holeVisualScale);
+
+            float startTime = Time.time;
+            float lastDamageTime = 0f;
+
+            while (Time.time - startTime < duration)
             {
-                Collider2D[] colliders = Physics2D.OverlapCircleAll(center, 28f);
+                Collider2D[] colliders = Physics2D.OverlapCircleAll(center, pullRadius);
                 foreach (var col in colliders)
                 {
-                    Rigidbody2D rb = col.GetComponent<Rigidbody2D>();
-                    if (rb != null && col.gameObject != this.gameObject)
-                    {
-                        Vector2 direction = (Vector2)center - (Vector2)col.transform.position;
-                        float distance = direction.magnitude;
+                    if (col.gameObject == holeVisual) continue;
 
-                        if (distance > 0.5f)
-                        {
-                            // Плавное притяжение: чем ближе, тем сильнее засасывает
-                            float forceFactor = Mathf.Clamp01(1f - (distance / 28f));
-                            rb.AddForce(direction.normalized * forceFactor * 45f, ForceMode2D.Force);
-                        }
+                    Vector2 direction = (Vector2)center - (Vector2)col.transform.position;
+                    float distance = direction.magnitude;
+                    if (distance < 0.3f) continue;
+
+                    float forceFactor = Mathf.Clamp01(1f - (distance / pullRadius));
+
+                    // 1. ПРОВЕРКА НА ИГРОКА
+                    Player player = col.GetComponent<Player>();
+                    if (player != null && player.data != null && !player.data.dead)
+                    {
+                        float moveDist = pullForce * forceFactor * Time.deltaTime;
+                        player.transform.position += (Vector3)direction.normalized * moveDist;
+                        continue; // Игрок обработан, идем к следующему коллайдеру
+                    }
+
+                    // 2. ПРОВЕРКА НА ДИНАМИЧЕСКИЕ ОБЪЕКТЫ (Пули, обломки, коробки)
+                    Rigidbody2D rb = col.GetComponent<Rigidbody2D>();
+                    // Фильтруем: жестко игнорируем пустые RB или те, у которых тип Static
+                    if (rb != null && rb.bodyType != RigidbodyType2D.Static)
+                    {
+                        // Для физических объектов даем импульс силой + слегка двигаем transform, чтобы не залипали
+                        rb.AddForce(direction.normalized * forceFactor * pullForce * 8f, ForceMode2D.Force);
+                        float moveDist = pullForce * forceFactor * Time.deltaTime * 2f;
+                        col.transform.position += (Vector3)direction.normalized * moveDist;
                     }
                 }
-                elapsed += Time.deltaTime;
+
+                // === ПЕРИОДИЧЕСКИЙ УРОН ===
+                if (Time.time >= lastDamageTime + damageInterval)
+                {
+                    lastDamageTime = Time.time;
+                    Collider2D[] damageColliders = Physics2D.OverlapCircleAll(center, damageRadius);
+                    foreach (var col in damageColliders)
+                    {
+                        Player targetPlayer = col.GetComponent<Player>();
+                        if (targetPlayer != null && targetPlayer.data != null && !targetPlayer.data.dead)
+                        {
+                            HealthHandler healthHandler = targetPlayer.GetComponent<HealthHandler>();
+                            if (healthHandler != null)
+                            {
+                                float damage = targetPlayer.data.maxHealth * damagePercent;
+                                healthHandler.TakeDamage(Vector2.up * damage, targetPlayer.transform.position);
+                            }
+                        }
+                    }
+                    CreateFlash(center);
+                }
                 yield return null;
             }
 
-            if (anomalyVisual != null) Destroy(anomalyVisual);
 
-            // Фаза 3: Взрыв (Синхронный урон и отталкивание)
-            CreateVisualCircle(center, new Color(0.6f, 0f, 0.6f, 0.5f), 4.0f);
-
-            Collider2D[] explosionColliders = Physics2D.OverlapCircleAll(center, 15f);
-            foreach (var col in explosionColliders)
-            {
-                Player targetPlayer = col.GetComponent<Player>();
-                Rigidbody2D rb = col.GetComponent<Rigidbody2D>();
-
-                if (rb != null)
-                {
-                    Vector2 pushDir = (Vector2)col.transform.position - (Vector2)center;
-                    rb.AddForce(pushDir.normalized * 25f, ForceMode2D.Impulse);
-                }
-
-                if (targetPlayer != null && targetPlayer.data != null && !targetPlayer.data.dead)
-                {
-                    var healthHandler = targetPlayer.GetComponent<HealthHandler>();
-                    if (healthHandler != null)
-                    {
-                        float damageAmount = targetPlayer.data.maxHealth * 0.10f; // 10% от макс ХП
-
-                        // Передаем урон вектором (направление и сила) и позицию взрыва. Движок игры сам посчитает все остальное.
-                        healthHandler.TakeDamage(Vector2.up * damageAmount, targetPlayer.transform.position);
-                    }
-                }
-
-
-            }
-
+            if (holeVisual != null) Destroy(holeVisual);
         }
 
-        private GameObject CreateVisualCircle(Vector3 pos, Color color, float scale)
+        // Создаёт отдельный круг (не дочерний) – для зарядки
+        private GameObject CreateDetachedCircle(Vector3 pos, Color color, float scale)
         {
-            GameObject visual = new GameObject("BlackHoleVisualCircle");
+            GameObject visual = new GameObject("BlackHoleCharging");
             visual.transform.position = pos;
             SpriteRenderer sprite = visual.AddComponent<SpriteRenderer>();
+            sprite.sprite = VisualCircleGenerator.GetCircle();
+            sprite.color = color;
+            sprite.sortingOrder = 200;      // высокий порядок отрисовки
+            visual.transform.localScale = new Vector3(scale, scale, 1f);
+            return visual;
+        }
 
-            // Используем глобальный оптимизированный кэшируемый генератор кругов
+        // Создаёт статический круг в точке – для самой дыры
+        private GameObject CreateStaticCircle(Vector3 pos, Color color, float scale)
+        {
+            GameObject visual = new GameObject("BlackHoleVisual");
+            visual.transform.position = pos;
+            SpriteRenderer sprite = visual.AddComponent<SpriteRenderer>();
             sprite.sprite = VisualCircleGenerator.GetCircle();
             sprite.color = color;
             visual.transform.localScale = new Vector3(scale, scale, 1f);
             return visual;
         }
 
+        private void CreateFlash(Vector3 center)
+        {
+            GameObject flash = new GameObject("HoleFlash");
+            flash.transform.position = center;
+            SpriteRenderer sr = flash.AddComponent<SpriteRenderer>();
+            sr.sprite = VisualCircleGenerator.GetCircle();
+            sr.color = new Color(0.8f, 0.2f, 0.8f, 0.6f);
+            flash.transform.localScale = new Vector3(1.2f, 1.2f, 1f);
+            Destroy(flash, 0.1f);
+        }
+
         void OnDestroy()
         {
             PhotonNetwork.RemoveCallbackTarget(this);
             if (cachedBlock != null)
-            {
                 cachedBlock.BlockAction -= OnBlockActivated;
-            }
         }
     }
 

@@ -438,28 +438,49 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
 
         private IEnumerator SpawnBlackHoleRoutine(Vector3 center)
         {
-            // 1. Зарядка (1 сек) – круг вокруг игрока, не привязанный к родителю
-            GameObject chargingVisual = CreateDetachedCircle(transform.position, new Color(0.8f, 0f, 0.8f, 0.9f), 2.5f);
+            // --- ИЗМЕНЕННЫЙ БЛОК: Динамический масштаб круга зарядки ---
+            // Считываем базовый масштаб игрока (или берем единичный, если игрока нет)
+            Vector3 playerScale = cachedPlayer != null ? cachedPlayer.transform.localScale : Vector3.one;
+
+            // Вычисляем масштаб круга: размер игрока + фиксированный отступ по осям X и Y.
+            // Значение 0.6f подобрано так, чтобы круг был в два раза меньше исходного, 
+            // но сохранял пропорциональный видимый зазор вокруг игрока любого масштаба.
+            float adaptiveScaleX = playerScale.x + 0.6f;
+            float adaptiveScaleY = playerScale.y + 0.6f;
+
+            // Создаем круг с начальными координатами
+            GameObject chargingVisual = CreateDetachedCircle(transform.position, new Color(0.8f, 0f, 0.8f, 0.9f), 1f);
+            if (chargingVisual != null)
+            {
+                chargingVisual.transform.localScale = new Vector3(adaptiveScaleX, adaptiveScaleY, 1f);
+            }
+
             float chargeEndTime = Time.time + 1f;
             while (Time.time < chargeEndTime)
             {
                 if (chargingVisual != null && cachedPlayer != null)
+                {
                     chargingVisual.transform.position = cachedPlayer.transform.position;
+
+                    // Постоянно обновляем масштаб на случай, если игрок изменил размер прямо во время зарядки
+                    Vector3 currentScale = cachedPlayer.transform.localScale;
+                    chargingVisual.transform.localScale = new Vector3(currentScale.x + 0.6f, currentScale.y + 0.6f, 1f);
+                }
                 yield return null;
             }
             if (chargingVisual != null) Destroy(chargingVisual);
+            // --- КОНЕЦ ИЗМЕНЕННОГО БЛОКА ---
 
-            // 2. Параметры дыры
+            // 2. Параметры дыры (ОСТАВЛЕНО БЕЗ ИЗМЕНЕНИЙ)
             float holeVisualScale = 4.0f;
             float damageRadius = 1.8f;
             float pullRadius = 28f;
-            float pullForce = 12f;          // Сила притяжения (для прямого перемещения игроков)
+            float pullForce = 12f;
             float duration = 3f;
             float damageInterval = 0.2f;
-            float damagePercent = 0.02f;    // 2% от макс ХП
+            float damagePercent = 0.02f;
 
             GameObject holeVisual = CreateStaticCircle(center, new Color(0.3f, 0f, 0.6f, 0.8f), holeVisualScale);
-
             float startTime = Time.time;
             float lastDamageTime = 0f;
 
@@ -469,7 +490,6 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
                 foreach (var col in colliders)
                 {
                     if (col.gameObject == holeVisual) continue;
-
                     Vector2 direction = (Vector2)center - (Vector2)col.transform.position;
                     float distance = direction.magnitude;
                     if (distance < 0.3f) continue;
@@ -482,15 +502,13 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
                     {
                         float moveDist = pullForce * forceFactor * Time.deltaTime;
                         player.transform.position += (Vector3)direction.normalized * moveDist;
-                        continue; // Игрок обработан, идем к следующему коллайдеру
+                        continue;
                     }
 
-                    // 2. ПРОВЕРКА НА ДИНАМИЧЕСКИЕ ОБЪЕКТЫ (Пули, обломки, коробки)
+                    // 2. ПРОВЕРКА НА ДИНАМИЧЕСКИЕ ОБЪЕКТЫ
                     Rigidbody2D rb = col.GetComponent<Rigidbody2D>();
-                    // Фильтруем: жестко игнорируем пустые RB или те, у которых тип Static
                     if (rb != null && rb.bodyType != RigidbodyType2D.Static)
                     {
-                        // Для физических объектов даем импульс силой + слегка двигаем transform, чтобы не залипали
                         rb.AddForce(direction.normalized * forceFactor * pullForce * 8f, ForceMode2D.Force);
                         float moveDist = pullForce * forceFactor * Time.deltaTime * 2f;
                         col.transform.position += (Vector3)direction.normalized * moveDist;
@@ -519,10 +537,9 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
                 }
                 yield return null;
             }
-
-
             if (holeVisual != null) Destroy(holeVisual);
         }
+
 
         // Создаёт отдельный круг (не дочерний) – для зарядки
         private GameObject CreateDetachedCircle(Vector3 pos, Color color, float scale)

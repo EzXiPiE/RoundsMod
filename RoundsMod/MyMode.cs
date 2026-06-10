@@ -43,7 +43,7 @@ namespace MyFirstRoundsMod
             CustomCard.BuildCard<SatelliteCard>();
         }
 
-        // Вынесли логику в отдельный метод, который можно безопасно вызывать
+        // Метод получения справйта арта для карточки
         public static void RefreshCardSprite()
         {
             if (CardArtSprite == null || CardArtSprite.texture == null)
@@ -312,12 +312,12 @@ namespace MyFirstRoundsMod
     {
         public override void SetupCard(CardInfo cardInfo, Gun gunInfo, ApplyCardStats cardStats, CharacterStatModifiers statModifiers, Block block)
         {
-            cardInfo.allowMultiple = false; // 
+            cardInfo.allowMultiple = false;
         }
 
         public override void OnAddCard(Player player, Gun gun, GunAmmo gunAmmo, CharacterData data, HealthHandler health, Gravity gravity, Block block, CharacterStatModifiers characterStats)
         {
-            characterStats.movementSpeed *= 0.85f; // Твой дебафф на скорость
+            characterStats.movementSpeed *= 0.85f; // дебафф на скорость
 
             var holeNet = player.gameObject.GetComponent<BlackHoleNetworkMono>();
             if (holeNet == null)
@@ -332,30 +332,30 @@ namespace MyFirstRoundsMod
         {
             return new CardInfoStat[]
             {
-            new CardInfoStat() { positive = true, stat = "Pull Radius", amount = "GLOBAL-ISH",simepleAmount = CardInfoStat.SimpleAmount.Some }, // 
-            new CardInfoStat() { positive = false, stat = "Movement Speed", amount = "-15%",simepleAmount = CardInfoStat.SimpleAmount.Some } // 
+            new CardInfoStat() { positive = true, stat = "Pull Radius", amount = "GLOBAL-ISH",simepleAmount = CardInfoStat.SimpleAmount.Some }, 
+            new CardInfoStat() { positive = false, stat = "Movement Speed", amount = "-15%",simepleAmount = CardInfoStat.SimpleAmount.Some } 
             };
         }
 
-        protected override string GetTitle() => "BLACK HOLE"; // 
-        protected override string GetDescription() => "Conjures a delayed gravitational anomaly at your crosshair!"; // 
-        protected override CardInfo.Rarity GetRarity() => CardInfo.Rarity.Rare; // 
+        protected override string GetTitle() => "BLACK HOLE"; 
+        protected override string GetDescription() => "Conjures a delayed gravitational anomaly at your crosshair!"; 
+        protected override CardInfo.Rarity GetRarity() => CardInfo.Rarity.Rare; 
         protected override CardThemeColor.CardThemeColorType GetTheme() =>
-CardThemeColor.CardThemeColorType.EvilPurple; // 
-        public override string GetModName() => "POWER OF KOJNER"; // 
+CardThemeColor.CardThemeColorType.EvilPurple; 
+        public override string GetModName() => "POWER OF KOJNER"; 
 
-        // ФИКС КАРТИНОК: Самый безопасный метод клонирования UI арта для ROUNDS 
+        // ФИКС КАРТИНОК: Метод клонирования UI арта для ROUNDS 
         protected override GameObject GetCardArt()
         {
             MyFirstRoundsMod.MyMod.RefreshCardSprite();
             GameObject artObj = new GameObject("CardArt");
             var image = artObj.AddComponent<UnityEngine.UI.Image>();
 
-            // Присваиваем наш бессмертный спрайт 
+            // Присваиваем спрайт 
             image.sprite = MyFirstRoundsMod.MyMod.CardArtSprite;
             image.color = new Color(0.65f, 0.65f, 0.65f, 1f); // Затемнение под Bloom 
 
-            // --- ДОБАВЬТЕ ЭТОТ КУСОК ДЛЯ РАСТЯГИВАНИЯ КАРТИНКИ --- 
+            // Растягиваем картинку 
             RectTransform rect = artObj.GetComponent<RectTransform>() ?? artObj.AddComponent<RectTransform>();
             rect.anchorMin = new Vector2(0f, 0f); // Привязка к левому нижнему углу 
             rect.anchorMax = new Vector2(1f, 1f); // Привязка к правому верхнему углу 
@@ -379,7 +379,7 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
         private bool isCooldown = false;
         private const float CooldownDuration = 5f;
 
-        // --- ИСПРАВЛЕНИЕ: Ссылка на запущенную корутину для её принудительной остановки ---
+        // Ссылка на запущенную корутину для её принудительной остановки
         private Coroutine activeHoleCoroutine;
 
         public void SetupBlackHole(Player player, Block block)
@@ -400,7 +400,7 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
             if (triggerType != BlockTrigger.BlockTriggerType.Default || isCooldown) return;
             if (photonView != null && !photonView.IsMine) return;
 
-            // --- ИСПРАВЛЕНИЕ: Защита от прожатия блока мертвым игроком ---
+            // Защита от прожатия блока мертвым игроком 
             if (cachedPlayer == null || cachedPlayer.data == null || cachedPlayer.data.dead) return;
 
             if (MainCam.instance != null && MainCam.instance.cam != null)
@@ -429,7 +429,7 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
                 Vector3 spawnPos = (Vector3)data[1];
                 if (photonView != null && photonView.ViewID == targetViewID)
                 {
-                    // --- ИСПРАВЛЕНИЕ: Перезапуск корутины с сохранением ссылки ---
+                    // Перезапуск корутины с сохранением ссылки
                     if (activeHoleCoroutine != null) StopCoroutine(activeHoleCoroutine);
                     activeHoleCoroutine = StartCoroutine(SpawnBlackHoleRoutine(spawnPos));
                 }
@@ -544,7 +544,7 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
                     }
                 }
 
-                // --- БЛОК НАНЕСЕНИЯ УРОНА (Оставлен без изменений) ---
+                // --- БЛОК НАНЕСЕНИЯ УРОНА ---
                 if (Time.time >= lastDamageTime + damageInterval)
                 {
                     lastDamageTime = Time.time;
@@ -609,7 +609,7 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
             Destroy(flash, 0.1f);
         }
 
-        // --- ИСПРАВЛЕНИЕ: Автоматический сброс корутины и очистка кругов при смерти/смене раунда ---
+        // Автоматический сброс корутины и очистка кругов при смерти/смене раунда 
         private void OnDisable()
         {
             if (activeHoleCoroutine != null)
@@ -640,7 +640,7 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
 
         public override void SetupCard(CardInfo cardInfo, Gun gunInfo, ApplyCardStats cardStats, CharacterStatModifiers statModifiers, Block block)
         {
-            cardInfo.allowMultiple = false; // <--- СЮДА! 
+            cardInfo.allowMultiple = false; 
         }
 
         public override void OnAddCard(Player player, Gun gun, GunAmmo gunAmmo, CharacterData data, HealthHandler health, Gravity gravity, Block block, CharacterStatModifiers stats)
@@ -678,11 +678,11 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
             GameObject artObj = new GameObject("CardArt");
             var image = artObj.AddComponent<UnityEngine.UI.Image>();
 
-            // Присваиваем наш бессмертный спрайт 
+            // Присваиваем наш спрайт 
             image.sprite = MyFirstRoundsMod.MyMod.CardArtSprite;
             image.color = new Color(0.65f, 0.65f, 0.65f, 1f); // Затемнение под Bloom 
 
-            // --- ДОБАВЬТЕ ЭТОТ КУСОК ДЛЯ РАСТЯГИВАНИЯ КАРТИНКИ --- 
+            // Растягиваем картинку
             RectTransform rect = artObj.GetComponent<RectTransform>() ?? artObj.AddComponent<RectTransform>();
             rect.anchorMin = new Vector2(0f, 0f); // Привязка к левому нижнему углу 
             rect.anchorMax = new Vector2(1f, 1f); // Привязка к правому верхнему углу 
@@ -933,11 +933,11 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
             GameObject artObj = new GameObject("CardArt");
             var image = artObj.AddComponent<UnityEngine.UI.Image>();
 
-            // Присваиваем наш бессмертный спрайт 
+            // Присваиваем наш спрайт 
             image.sprite = MyFirstRoundsMod.MyMod.CardArtSprite;
             image.color = new Color(0.65f, 0.65f, 0.65f, 1f); // Затемнение под Bloom 
 
-            // --- ДОБАВЬТЕ ЭТОТ КУСОК ДЛЯ РАСТЯГИВАНИЯ КАРТИНКИ --- 
+            // Растягиваем картинку 
             RectTransform rect = artObj.GetComponent<RectTransform>() ?? artObj.AddComponent<RectTransform>();
             rect.anchorMin = new Vector2(0f, 0f); // Привязка к левому нижнему углу 
             rect.anchorMax = new Vector2(1f, 1f); // Привязка к правому верхнему углу 
@@ -980,7 +980,7 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
         private float lastHitTime = -1f;
         private float lastFrameHealth;
 
-        // Новый сетевой код Photon для жесткой синхронизации уничтожения спутников 
+        // Новый сетевой код Photon
         private const byte SatelliteSyncEventCode = 92;
 
         private void Start()
@@ -1054,13 +1054,13 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
                 }
             }
 
-            // Критически важно: синхронизируем отслеживание ХП предыдущего кадра 
+            // синхронизируем отслеживание ХП предыдущего кадра 
             if (view.IsMine)
             {
                 lastFrameHealth = data.health;
             }
 
-            // Логика вращения (без изменений) 
+            // Логика вращения
             if (satellites.Count == 0) return;
             float angleStep = 360f / satellites.Count;
             for (int i = 0; i < satellites.Count; i++)
@@ -1073,7 +1073,7 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
             }
         }
 
-        // Сетевой приемник пакетов (OnEvent) 
+        // Сетевой приемник пакетов 
         public void OnEvent(ExitGames.Client.Photon.EventData photonEvent)
         {
             if (photonEvent.Code == SatelliteSyncEventCode)
@@ -1099,7 +1099,7 @@ CardThemeColor.CardThemeColorType.EvilPurple; //
                         health.Heal(0f);
                     }
 
-                    // Удаляем ровно ОДИН спутник синхронно у всех игроков
+                    // Удаляем ОДИН спутник синхронно у всех игроков
                     if (satellites.Count > 0)
                     {
                         int lastIndex = satellites.Count - 1;

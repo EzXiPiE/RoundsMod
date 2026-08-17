@@ -110,9 +110,9 @@ namespace MyFirstRoundsMod
 
             // Баффы персонажа
             data.maxHealth *= 5f;
-            characterStats.movementSpeed *= 2.1f;
-            characterStats.jump *= 1.4f;
-            characterStats.sizeMultiplier *= 1.4f;
+            characterStats.movementSpeed = 2.1f;
+            characterStats.jump = 1.4f;
+            characterStats.sizeMultiplier = 1.4f;
 
             // Баффы оружия
             gun.damage *= 3f;

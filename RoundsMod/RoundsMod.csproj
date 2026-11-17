@@ -108,7 +108,7 @@
       <HintPath>..\..\..\..\..\..\Rounds\Rounds_Data\Managed\UnityEngine.UIModule.dll</HintPath>
     </Reference>
   </ItemGroup>
-    <ItemGroup>
+  <ItemGroup>
     <Compile Include="MyMod.cs" />
     <Compile Include="Utils\AssetHelper.cs" />
     <Compile Include="Utils\VisualHelper.cs" />
@@ -124,7 +124,6 @@
     <Compile Include="Patches\HealthHandlerPatch.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
-
   <ItemGroup>
     <EmbeddedResource Include="kojner_power.png" />
   </ItemGroup>

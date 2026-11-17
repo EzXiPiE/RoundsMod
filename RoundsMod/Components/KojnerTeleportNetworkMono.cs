@@ -1,13 +1,11 @@
-﻿// Подключаем стандартные пространства имен для работы с Photon и Unity
+﻿using System.Collections;
 using ExitGames.Client.Photon;
 using Photon.Pun;
 using Photon.Realtime;
-using System.Collections;
 using UnityEngine;
 
 namespace RoundsMod.Components
 {
-    // Сетевой компонент для мгновенного перемещения персонажа
     public class KojnerTeleportNetworkMono : MonoBehaviour, IOnEventCallback
     {
         private Player cachedPlayer;
@@ -15,7 +13,7 @@ namespace RoundsMod.Components
         private PhotonView photonView;
         private const byte TeleportEventCode = 89;
         private bool isTeleporting;
-        // Метод инициализации и привязки к компоненту блока игрока
+
         public void SetupTeleport(Player player, Block block)
         {
             cachedPlayer = player;
@@ -25,30 +23,51 @@ namespace RoundsMod.Components
             if (cachedBlock != null) cachedBlock.BlockAction += OnBlockActivated;
         }
 
-        // Регистрируем слушатель сетевых событий Photon при старте
         private void Start() => PhotonNetwork.AddCallbackTarget(this);
 
-        // Срабатывает при нажатии кнопки блока игроком
         private void OnBlockActivated(BlockTrigger.BlockTriggerType triggerType)
         {
             if (triggerType != BlockTrigger.BlockTriggerType.Default || isTeleporting) return;
             if (photonView != null && !photonView.IsMine) return;
             if (cachedPlayer == null || cachedPlayer.data == null || cachedPlayer.data.dead) return;
-            // Получаем мировые координаты курсора и отправляем пакет по сети
-            if (MainCam.instance != null && MainCam.instance.cam != null)
+            if (MainCam.instance?.cam == null) return;
+
+            Vector3 targetPos = GetSafeTeleportPos(MainCam.instance.cam.ScreenToWorldPoint(Input.mousePosition));
+            if (photonView != null)
             {
-                Vector3 pos = MainCam.instance.cam.ScreenToWorldPoint(Input.mousePosition);
-                pos.z = 0f;
-                if (photonView != null)
-                {
-                    object[] content = { photonView.ViewID, pos };
-                    var opts = new RaiseEventOptions { Receivers = ReceiverGroup.All };
-                    PhotonNetwork.RaiseEvent(TeleportEventCode, content, opts, SendOptions.SendReliable);
-                }
+                object[] content = { photonView.ViewID, targetPos };
+                PhotonNetwork.RaiseEvent(TeleportEventCode, content, new RaiseEventOptions { Receivers = ReceiverGroup.All }, SendOptions.SendReliable);
             }
         }
 
-        // Принимаем сетевое событие на всех клиентах и запускаем перемещение
+        private Vector3 GetSafeTeleportPos(Vector3 rawPos)
+        {
+            rawPos.z = 0f;
+            Vector2 start = transform.position;
+            Vector2 target = rawPos;
+            Vector2 dir = (start - target);
+            float dist = dir.magnitude;
+            Vector2 stepDir = dist > 0.01f ? dir / dist : Vector2.up;
+
+            for (float offset = 0f; offset <= dist; offset += 0.35f)
+            {
+                Vector2 candidate = target + stepDir * offset;
+                if (!IsInsideSolid(candidate))
+                    return new Vector3(candidate.x, candidate.y, 0f);
+            }
+            return new Vector3(start.x, start.y, 0f);
+        }
+        private bool IsInsideSolid(Vector2 point)
+        {
+            foreach (var col in Physics2D.OverlapCircleAll(point, 0.55f))
+            {
+                if (col == null || col.isTrigger) continue;
+                if (col.transform.root == transform.root) continue;
+                if (col.attachedRigidbody != null && col.attachedRigidbody.bodyType == RigidbodyType2D.Dynamic) continue;
+                return true;
+            }
+            return false;
+        }
         public void OnEvent(EventData photonEvent)
         {
             if (photonEvent.Code != TeleportEventCode) return;
@@ -56,7 +75,7 @@ namespace RoundsMod.Components
             if (photonView != null && photonView.ViewID == (int)data[0])
                 StartCoroutine(ExecuteTeleportRoutine((Vector3)data[1]));
         }
-        // Корутина синхронного телепорта со сбросом физики и сетевой интерполяции
+
         private IEnumerator ExecuteTeleportRoutine(Vector3 targetPos)
         {
             isTeleporting = true;
@@ -64,8 +83,7 @@ namespace RoundsMod.Components
             {
                 var rb = GetComponent<Rigidbody2D>();
                 if (rb != null) { rb.velocity = Vector2.zero; rb.angularVelocity = 0f; }
-                var col = cachedPlayer.GetComponentInParent<PlayerCollision>();
-                col?.IgnoreWallForFrames(3);
+                cachedPlayer.GetComponentInParent<PlayerCollision>()?.IgnoreWallForFrames(2);
                 cachedPlayer.gameObject.SendMessage("ClearQuantizedObject", SendMessageOptions.DontRequireReceiver);
                 transform.position = targetPos;
                 if (transform.root != null) transform.root.position = targetPos;
@@ -76,7 +94,6 @@ namespace RoundsMod.Components
             isTeleporting = false;
         }
 
-        // Отписываемся от событий при удалении объекта
         private void OnDestroy()
         {
             PhotonNetwork.RemoveCallbackTarget(this);

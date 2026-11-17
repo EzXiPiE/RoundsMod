@@ -107,6 +107,8 @@ namespace RoundsMod.Components
             yield return new WaitForSeconds(0.1f);
             isRewinding = false;
         }
+        private static readonly MethodInfo SetBulletsMethod = typeof(GunAmmo).GetMethod("SetActiveBullets", Flags);
+
         private void ResetWeaponAmmo(int amount)
         {
             if (playerAmmo == null) return;
@@ -115,6 +117,11 @@ namespace RoundsMod.Components
             ReloadCntField?.SetValue(playerAmmo, 0f);
             ReloadTmrField?.SetValue(playerAmmo, 0f);
             playerAmmo.SendMessage("Reconstruct", SendMessageOptions.DontRequireReceiver);
+            if (SetBulletsMethod != null)
+            {
+                var parameters = SetBulletsMethod.GetParameters();
+                SetBulletsMethod.Invoke(playerAmmo, parameters.Length == 1 ? new object[] { true } : null);
+            }
         }
 
         private void DrawEffect(Vector3 pos, Color tint)

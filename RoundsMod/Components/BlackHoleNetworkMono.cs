@@ -41,19 +41,20 @@ namespace RoundsMod.Components
         {
             if (triggerType != BlockTrigger.BlockTriggerType.Default || isCooldown) return;
             if (photonView != null && !photonView.IsMine) return;
-            if (cachedPlayer?.data?.dead == true) return;
+            if (cachedPlayer == null || cachedPlayer.data == null || cachedPlayer.data.dead) return;
             if (MainCam.instance?.cam != null)
             {
                 Vector3 targetPos = MainCam.instance.cam.ScreenToWorldPoint(Input.mousePosition);
                 targetPos.z = 0f;
                 if (photonView != null)
                 {
+                    isCooldown = true;
                     object[] content = { photonView.ViewID, targetPos };
                     PhotonNetwork.RaiseEvent(BlackHoleEventCode, content, new RaiseEventOptions { Receivers = ReceiverGroup.All }, SendOptions.SendReliable);
                 }
-                StartCoroutine(CooldownRoutine());
             }
         }
+
         public void OnEvent(ExitGames.Client.Photon.EventData photonEvent)
         {
             if (photonEvent.Code != BlackHoleEventCode) return;
@@ -61,6 +62,7 @@ namespace RoundsMod.Components
             if (photonView != null && photonView.ViewID == (int)data[0])
             {
                 CleanupHole();
+                isCooldown = true;
                 activeHoleCoroutine = StartCoroutine(SpawnBlackHoleRoutine((Vector3)data[1]));
             }
         }
@@ -71,6 +73,7 @@ namespace RoundsMod.Components
             yield return new WaitForSeconds(5f);
             isCooldown = false;
         }
+
         private System.Collections.IEnumerator SpawnBlackHoleRoutine(Vector3 center)
         {
             activeChargingVisual = CreateCircle("BlackHoleCharging", transform.position, new Color(0.8f, 0f, 0.8f, 0.9f), 1.6f, 200);
@@ -119,7 +122,9 @@ namespace RoundsMod.Components
                 yield return null;
             }
             CleanupHole();
+            StartCoroutine(CooldownRoutine());
         }
+
         private GameObject CreateCircle(string objName, Vector3 pos, Color col, float scale, int order)
         {
             var go = new GameObject(objName);
@@ -137,9 +142,11 @@ namespace RoundsMod.Components
             if (activeHoleCoroutine != null) { StopCoroutine(activeHoleCoroutine); activeHoleCoroutine = null; }
             if (activeChargingVisual != null) { Destroy(activeChargingVisual); activeChargingVisual = null; }
             if (activeHoleVisual != null) { Destroy(activeHoleVisual); activeHoleVisual = null; }
+            isCooldown = false;
         }
 
-        private void OnDisable() { CleanupHole(); isCooldown = false; }
+        private void OnDisable() => CleanupHole();
+
         private void OnDestroy()
         {
             PhotonNetwork.RemoveCallbackTarget(this);
@@ -147,5 +154,7 @@ namespace RoundsMod.Components
             if (cachedBlock != null) cachedBlock.BlockAction -= OnBlockActivated;
             CleanupHole();
         }
+
+
     }
 }

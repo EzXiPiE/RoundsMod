@@ -108,22 +108,23 @@
       <HintPath>..\..\..\..\..\..\Rounds\Rounds_Data\Managed\UnityEngine.UIModule.dll</HintPath>
     </Reference>
   </ItemGroup>
-  <ItemGroup>
-    <Compile Include="Cards\BlackHoleCard.cs" />
-    <Compile Include="Cards\KojnerPowerCard.cs" />
+    <ItemGroup>
+    <Compile Include="MyMod.cs" />
+    <Compile Include="Utils\AssetHelper.cs" />
+    <Compile Include="Utils\VisualHelper.cs" />
     <Compile Include="Cards\KojnerBaseCard.cs" />
-    <Compile Include="Cards\SatelliteCard.cs" />
+    <Compile Include="Cards\KojnerPowerCard.cs" />
+    <Compile Include="Cards\BlackHoleCard.cs" />
     <Compile Include="Cards\TimeControlCard.cs" />
-    <Compile Include="Components\BlackHoleNetworkMono.cs" />
+    <Compile Include="Cards\SatelliteCard.cs" />
     <Compile Include="Components\KojnerTeleportNetworkMono.cs" />
-    <Compile Include="Components\SatelliteShieldMono.cs" />
+    <Compile Include="Components\BlackHoleNetworkMono.cs" />
     <Compile Include="Components\TimeTrackerComponent.cs" />
+    <Compile Include="Components\SatelliteShieldMono.cs" />
     <Compile Include="Patches\HealthHandlerPatch.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Utils\AssetHelper.cs" />
-    <Compile Include="Utils\MyMod.cs" />
-    <Compile Include="Utils\VisualHelper.cs" />
   </ItemGroup>
+
   <ItemGroup>
     <EmbeddedResource Include="kojner_power.png" />
   </ItemGroup>

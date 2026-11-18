@@ -112,6 +112,7 @@
     <Compile Include="MyMod.cs" />
     <Compile Include="Utils\AssetHelper.cs" />
     <Compile Include="Utils\VisualHelper.cs" />
+    <Compile Include="Utils\IKojnerAbility.cs" />
     <Compile Include="Cards\KojnerBaseCard.cs" />
     <Compile Include="Cards\KojnerPowerCard.cs" />
     <Compile Include="Cards\BlackHoleCard.cs" />

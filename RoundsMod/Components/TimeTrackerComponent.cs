@@ -64,7 +64,12 @@ namespace RoundsMod.Components
                 history.Enqueue(new Snapshot { pos = transform.position, hp = cachedPlayer.data.health, ammo = ammo });
                 while (history.Count > 100) history.Dequeue();
             }
+            else if (history.Count > 0)
+            {
+                history.Clear();
+            }
         }
+
 
         public void TryActivateAbility()
         {

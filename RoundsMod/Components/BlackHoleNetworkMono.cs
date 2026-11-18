@@ -16,6 +16,8 @@ namespace RoundsMod.Components
         private Coroutine activeHoleCoroutine;
         private GameObject activeChargingVisual;
         private GameObject activeHoleVisual;
+        private static readonly System.Reflection.FieldInfo PlayerVelField = typeof(PlayerVelocity).GetField("velocity", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
 
         public string AbilityName => "EVENT HORIZON";
         public float CooldownRemaining => Mathf.Max(0f, cooldownEndTime - Time.time);
@@ -101,13 +103,19 @@ namespace RoundsMod.Components
                     if (col == null || col.gameObject == activeHoleVisual) continue;
                     Vector2 dir = (Vector2)center - (Vector2)col.transform.position;
                     if (dir.magnitude < 0.2f) continue;
+
                     float factor = Mathf.Clamp01(1f - dir.magnitude / 28f);
+                    RaycastHit2D wallHit = Physics2D.Linecast(center, col.transform.position);
+                    if (wallHit.collider != null && !wallHit.collider.isTrigger && wallHit.collider.transform.root != col.transform.root && wallHit.collider.attachedRigidbody == null)
+                        factor *= 0.35f;
+
                     var p = col.GetComponent<Player>();
                     if (p?.data != null && !p.data.dead && p.data.view?.IsMine == true)
                         p.transform.position += (Vector3)dir.normalized * (25f * factor * Time.deltaTime);
                     else if (PhotonNetwork.IsMasterClient && col.attachedRigidbody?.bodyType == RigidbodyType2D.Dynamic)
                         col.attachedRigidbody.position += dir.normalized * (17f * factor * Time.deltaTime);
                 }
+
                 if (Time.time >= lastTick + 0.2f)
                 {
                     lastTick = Time.time;
@@ -121,7 +129,61 @@ namespace RoundsMod.Components
                 }
                 yield return null;
             }
+            DetonateHole(center);
             CleanupVisuals();
+        }
+        private void DetonateHole(Vector3 center)
+        {
+            Destroy(CreateCircle("HoleBlastOuter", center, new Color(0.6f, 0.1f, 1f, 0.45f), 9.0f, 55), 0.18f);
+            Destroy(CreateCircle("HoleBlastCore", center, new Color(1f, 0.7f, 1f, 0.9f), 3.2f, 65), 0.12f);
+
+            foreach (var col in Physics2D.OverlapCircleAll(center, 1.8f))
+            {
+                var p = col.GetComponentInParent<Player>();
+                if (p?.data != null && !p.data.dead)
+                    p.GetComponent<HealthHandler>()?.TakeDamage(Vector2.up * (p.data.maxHealth * 0.04f), p.transform.position);
+            }
+
+            StartCoroutine(BlastWaveRoutine(center));
+        }
+
+        private System.Collections.IEnumerator BlastWaveRoutine(Vector3 center)
+        {
+            var pushedPlayers = new System.Collections.Generic.HashSet<Player>();
+            float endTime = Time.time + 0.18f;
+
+            while (Time.time < endTime)
+            {
+                float progress = 1f - ((endTime - Time.time) / 0.18f);
+                float waveMultiplier = Mathf.Lerp(1f, 0.15f, progress);
+
+                foreach (var col in Physics2D.OverlapCircleAll(center, 50f))
+                {
+                    if (col == null || col.gameObject == activeHoleVisual) continue;
+                    Vector2 targetPoint = col.bounds.center;
+                    Vector2 pushDir = targetPoint - (Vector2)center;
+                    float dist = pushDir.magnitude;
+                    pushDir = dist < 0.1f ? Vector2.up : pushDir / dist;
+
+                    float falloff = Mathf.Clamp01(1f - dist / 50f);
+                    if (falloff <= 0.01f) continue;
+
+                    var p = col.GetComponentInParent<Player>();
+                    if (p?.data != null && !p.data.dead && (p.data.view == null || p.data.view.IsMine))
+                    {
+                        if (pushedPlayers.Add(p) && p.data.playerVel != null && PlayerVelField != null)
+                        {
+                            Vector2 curVel = (Vector2)PlayerVelField.GetValue(p.data.playerVel);
+                            PlayerVelField.SetValue(p.data.playerVel, curVel + pushDir * (120f * falloff));
+                        }
+                    }
+                    else if (col.attachedRigidbody != null && col.attachedRigidbody.bodyType != RigidbodyType2D.Static)
+                    {
+                        col.attachedRigidbody.position += pushDir * (120f * falloff * waveMultiplier * Time.deltaTime);
+                    }
+                }
+                yield return null;
+            }
         }
 
         private GameObject CreateCircle(string objName, Vector3 pos, Color col, float scale, int order)

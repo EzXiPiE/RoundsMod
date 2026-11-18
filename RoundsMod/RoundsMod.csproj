@@ -113,6 +113,7 @@
     <Compile Include="Utils\AssetHelper.cs" />
     <Compile Include="Utils\VisualHelper.cs" />
     <Compile Include="Utils\IKojnerAbility.cs" />
+    <Compile Include="Utils\NetEventRegistry.cs" />
     <Compile Include="Cards\KojnerBaseCard.cs" />
     <Compile Include="Cards\KojnerPowerCard.cs" />
     <Compile Include="Cards\BlackHoleCard.cs" />

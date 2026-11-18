@@ -119,6 +119,7 @@
     <Compile Include="Cards\BlackHoleCard.cs" />
     <Compile Include="Cards\TimeControlCard.cs" />
     <Compile Include="Cards\SatelliteCard.cs" />
+    <Compile Include="Cards\KojnerActiveCard.cs" />
     <Compile Include="Components\KojnerTeleportNetworkMono.cs" />
     <Compile Include="Components\BlackHoleNetworkMono.cs" />
     <Compile Include="Components\TimeTrackerComponent.cs" />

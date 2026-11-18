@@ -122,6 +122,7 @@
     <Compile Include="Components\BlackHoleNetworkMono.cs" />
     <Compile Include="Components\TimeTrackerComponent.cs" />
     <Compile Include="Components\SatelliteShieldMono.cs" />
+    <Compile Include="Components\KojnerAbilityManager.cs" />
     <Compile Include="Patches\HealthHandlerPatch.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

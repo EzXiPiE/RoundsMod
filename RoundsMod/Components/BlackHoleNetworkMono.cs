@@ -6,24 +6,26 @@ using UnityEngine;
 
 namespace RoundsMod.Components
 {
-    public class BlackHoleNetworkMono : MonoBehaviour, IOnEventCallback
+    public class BlackHoleNetworkMono : MonoBehaviour, IOnEventCallback, IKojnerAbility
     {
         private Player cachedPlayer;
-        private Block cachedBlock;
         private PhotonView photonView;
         private const byte BlackHoleEventCode = 91;
-        private bool isCooldown;
+        private bool isBusy;
+        private float cooldownEndTime;
         private Coroutine activeHoleCoroutine;
         private GameObject activeChargingVisual;
         private GameObject activeHoleVisual;
-        // Остальные поля и инициализация компонента...
-        public void SetupBlackHole(Player player, Block block)
+
+        public string AbilityName => "EVENT HORIZON";
+        public float CooldownRemaining => Mathf.Max(0f, cooldownEndTime - Time.time);
+
+        public void SetupBlackHole(Player player)
         {
             cachedPlayer = player;
             photonView = player.GetComponent<PhotonView>();
-            if (cachedBlock != null) cachedBlock.BlockAction -= OnBlockActivated;
-            cachedBlock = block;
-            if (cachedBlock != null) cachedBlock.BlockAction += OnBlockActivated;
+            var mgr = player.gameObject.GetComponent<KojnerAbilityManager>() ?? player.gameObject.AddComponent<KojnerAbilityManager>();
+            mgr.TryBindSlotE(this);
         }
 
         private void Start()
@@ -32,46 +34,44 @@ namespace RoundsMod.Components
             UnboundLib.GameModes.GameModeManager.AddHook("PointStart", OnRoundStart);
         }
 
-        private System.Collections.IEnumerator OnRoundStart(UnboundLib.GameModes.IGameModeHandler gm)
+        private System.Collections.IEnumerator OnRoundStart(UnboundLib.GameModes.IGameModeHandler gm) { FullReset(); yield break; }
+
+        public void TryActivateAbility()
         {
-            CleanupHole();
-            yield break;
-        }
-        private void OnBlockActivated(BlockTrigger.BlockTriggerType triggerType)
-        {
-            if (triggerType != BlockTrigger.BlockTriggerType.Default || isCooldown) return;
+            if (isBusy || CooldownRemaining > 0f) return;
             if (photonView != null && !photonView.IsMine) return;
             if (cachedPlayer == null || cachedPlayer.data == null || cachedPlayer.data.dead) return;
-            if (MainCam.instance?.cam != null)
+            if (MainCam.instance?.cam == null) return;
+
+            Vector3 targetPos = MainCam.instance.cam.ScreenToWorldPoint(Input.mousePosition);
+            targetPos.z = 0f;
+            isBusy = true;
+            cooldownEndTime = Time.time + 9f;
+
+            if (photonView != null && PhotonNetwork.InRoom)
             {
-                Vector3 targetPos = MainCam.instance.cam.ScreenToWorldPoint(Input.mousePosition);
-                targetPos.z = 0f;
-                if (photonView != null)
-                {
-                    isCooldown = true;
-                    object[] content = { photonView.ViewID, targetPos };
-                    PhotonNetwork.RaiseEvent(BlackHoleEventCode, content, new RaiseEventOptions { Receivers = ReceiverGroup.All }, SendOptions.SendReliable);
-                }
+                object[] content = { photonView.ViewID, targetPos };
+                PhotonNetwork.RaiseEvent(BlackHoleEventCode, content, new RaiseEventOptions { Receivers = ReceiverGroup.All }, SendOptions.SendReliable);
+            }
+            else
+            {
+                CleanupVisuals();
+                isBusy = true;
+                activeHoleCoroutine = StartCoroutine(SpawnBlackHoleRoutine(targetPos));
             }
         }
 
-        public void OnEvent(ExitGames.Client.Photon.EventData photonEvent)
+        public void OnEvent(EventData photonEvent)
         {
             if (photonEvent.Code != BlackHoleEventCode) return;
             object[] data = (object[])photonEvent.CustomData;
             if (photonView != null && photonView.ViewID == (int)data[0])
             {
-                CleanupHole();
-                isCooldown = true;
+                CleanupVisuals();
+                isBusy = true;
+                cooldownEndTime = Time.time + 9f;
                 activeHoleCoroutine = StartCoroutine(SpawnBlackHoleRoutine((Vector3)data[1]));
             }
-        }
-
-        private System.Collections.IEnumerator CooldownRoutine()
-        {
-            isCooldown = true;
-            yield return new WaitForSeconds(5f);
-            isCooldown = false;
         }
 
         private System.Collections.IEnumerator SpawnBlackHoleRoutine(Vector3 center)
@@ -80,7 +80,7 @@ namespace RoundsMod.Components
             float chargeEnd = Time.time + 1f;
             while (Time.time < chargeEnd)
             {
-                if (cachedPlayer == null || cachedPlayer.data == null || cachedPlayer.data.dead) { CleanupHole(); yield break; }
+                if (cachedPlayer == null || cachedPlayer.data == null || cachedPlayer.data.dead) { FullReset(); yield break; }
                 if (activeChargingVisual != null)
                 {
                     activeChargingVisual.transform.position = cachedPlayer.transform.position;
@@ -90,11 +90,12 @@ namespace RoundsMod.Components
                 yield return null;
             }
             if (activeChargingVisual != null) Destroy(activeChargingVisual);
+
             activeHoleVisual = CreateCircle("BlackHoleVisual", center, new Color(0.3f, 0f, 0.6f, 0.8f), 4.0f, 50);
             float start = Time.time, lastTick = 0f;
             while (Time.time - start < 3f)
             {
-                if (cachedPlayer == null || cachedPlayer.data == null || cachedPlayer.data.dead) { CleanupHole(); yield break; }
+                if (cachedPlayer == null || cachedPlayer.data == null || cachedPlayer.data.dead) { FullReset(); yield break; }
                 foreach (var col in Physics2D.OverlapCircleAll(center, 28f))
                 {
                     if (col == null || col.gameObject == activeHoleVisual) continue;
@@ -116,13 +117,11 @@ namespace RoundsMod.Components
                         if (p?.data != null && !p.data.dead)
                             p.GetComponent<HealthHandler>()?.TakeDamage(Vector2.up * (p.data.maxHealth * 0.02f), p.transform.position);
                     }
-                    var flash = CreateCircle("HoleFlash", center, new Color(0.8f, 0.2f, 0.8f, 0.6f), 1.2f, 60);
-                    Destroy(flash, 0.1f);
+                    Destroy(CreateCircle("HoleFlash", center, new Color(0.8f, 0.2f, 0.8f, 0.6f), 1.2f, 60), 0.1f);
                 }
                 yield return null;
             }
-            CleanupHole();
-            StartCoroutine(CooldownRoutine());
+            CleanupVisuals();
         }
 
         private GameObject CreateCircle(string objName, Vector3 pos, Color col, float scale, int order)
@@ -137,24 +136,27 @@ namespace RoundsMod.Components
             return go;
         }
 
-        private void CleanupHole()
+        private void CleanupVisuals()
         {
             if (activeHoleCoroutine != null) { StopCoroutine(activeHoleCoroutine); activeHoleCoroutine = null; }
             if (activeChargingVisual != null) { Destroy(activeChargingVisual); activeChargingVisual = null; }
             if (activeHoleVisual != null) { Destroy(activeHoleVisual); activeHoleVisual = null; }
-            isCooldown = false;
+            isBusy = false;
         }
 
-        private void OnDisable() => CleanupHole();
+        private void FullReset()
+        {
+            CleanupVisuals();
+            cooldownEndTime = 0f;
+        }
+
+        private void OnDisable() => FullReset();
 
         private void OnDestroy()
         {
             PhotonNetwork.RemoveCallbackTarget(this);
             UnboundLib.GameModes.GameModeManager.RemoveHook("PointStart", OnRoundStart);
-            if (cachedBlock != null) cachedBlock.BlockAction -= OnBlockActivated;
-            CleanupHole();
+            FullReset();
         }
-
-
     }
 }

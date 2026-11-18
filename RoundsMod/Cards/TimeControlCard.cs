@@ -4,11 +4,11 @@ using RoundsMod.Components;
 
 namespace RoundsMod.Cards
 {
-    public class TimeControlCard : KojnerBaseCard
+    public class TimeControlCard : KojnerActiveCard
     {
         protected override string ArtFileName => "time_control.png";
         protected override string GetTitle() => "CHRONO SHIFT";
-        protected override string GetDescription() => "Press [E] to rewind 5 seconds into the past, restoring your exact position, health, and ammo.";
+        protected override string GetDescription() => "Binds to a free ability slot (Q/E/F/V). Rewind 5 seconds into the past, restoring position, health, and ammo.";
         protected override CardInfo.Rarity GetRarity() => CardInfo.Rarity.Rare;
         protected override CardThemeColor.CardThemeColorType GetTheme() => CardThemeColor.CardThemeColorType.ColdBlue;
 
@@ -24,7 +24,7 @@ namespace RoundsMod.Cards
 
         protected override CardInfoStat[] GetStats() => new[]
         {
-            new CardInfoStat { positive = true, stat = "Active [E]", amount = "5s Rewind", simepleAmount = CardInfoStat.SimpleAmount.Some },
+            new CardInfoStat { positive = true, stat = "Active Slot", amount = "5s Rewind", simepleAmount = CardInfoStat.SimpleAmount.Some },
             new CardInfoStat { positive = true, stat = "Restore State", amount = "HP & Ammo", simepleAmount = CardInfoStat.SimpleAmount.Some },
             new CardInfoStat { positive = false, stat = "Max Health", amount = "-15%", simepleAmount = CardInfoStat.SimpleAmount.Some }
         };

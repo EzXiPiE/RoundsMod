@@ -27,7 +27,7 @@ namespace RoundsMod.Components
             cachedPlayer = player;
             photonView = player.GetComponent<PhotonView>();
             var mgr = player.gameObject.GetComponent<KojnerAbilityManager>() ?? player.gameObject.AddComponent<KojnerAbilityManager>();
-            mgr.TryBindSlotE(this);
+            mgr.TryBindAbility(this);
         }
 
         private void Start()

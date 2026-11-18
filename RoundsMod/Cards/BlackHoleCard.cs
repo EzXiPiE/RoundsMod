@@ -4,11 +4,11 @@ using RoundsMod.Components;
 
 namespace RoundsMod.Cards
 {
-    public class BlackHoleCard : KojnerBaseCard
+    public class BlackHoleCard : KojnerActiveCard
     {
         protected override string ArtFileName => "black_hole.png";
         protected override string GetTitle() => "EVENT HORIZON";
-        protected override string GetDescription() => "Press [E] to tear open a singularity at your cursor, dragging foes and debris into oblivion.";
+        protected override string GetDescription() => "Binds to a free ability slot (Q/E/F/V). Tear open a singularity at your cursor that pulls foes in and detonates.";
         protected override CardInfo.Rarity GetRarity() => CardInfo.Rarity.Rare;
         protected override CardThemeColor.CardThemeColorType GetTheme() => CardThemeColor.CardThemeColorType.EvilPurple;
 
@@ -24,7 +24,7 @@ namespace RoundsMod.Cards
 
         protected override CardInfoStat[] GetStats() => new[]
         {
-            new CardInfoStat { positive = true, stat = "Active [E]", amount = "Singularity", simepleAmount = CardInfoStat.SimpleAmount.Some },
+            new CardInfoStat { positive = true, stat = "Active Slot", amount = "Singularity", simepleAmount = CardInfoStat.SimpleAmount.Some },
             new CardInfoStat { positive = false, stat = "Movement Speed", amount = "-15%", simepleAmount = CardInfoStat.SimpleAmount.Some }
         };
 

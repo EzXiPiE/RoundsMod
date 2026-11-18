@@ -10,7 +10,7 @@ namespace RoundsMod.Components
     {
         private Player cachedPlayer;
         private PhotonView photonView;
-        private const byte BlackHoleEventCode = 91;
+        private static readonly byte BlackHoleEventCode = NetEventRegistry.GetCode("KojnerMod.BlackHole");
         private bool isBusy;
         private float cooldownEndTime;
         private Coroutine activeHoleCoroutine;
@@ -177,10 +177,11 @@ namespace RoundsMod.Components
                             PlayerVelField.SetValue(p.data.playerVel, curVel + pushDir * (120f * falloff));
                         }
                     }
-                    else if (col.attachedRigidbody != null && col.attachedRigidbody.bodyType != RigidbodyType2D.Static)
+                    else if ((!PhotonNetwork.InRoom || PhotonNetwork.IsMasterClient) && col.attachedRigidbody != null && col.attachedRigidbody.bodyType != RigidbodyType2D.Static)
                     {
                         col.attachedRigidbody.position += pushDir * (120f * falloff * waveMultiplier * Time.deltaTime);
                     }
+
                 }
                 yield return null;
             }

@@ -26,7 +26,7 @@ namespace RoundsMod.Components
         private PhotonView playerView;
         private float cooldownEndTime;
         private float nextRecordTime;
-        private const byte RewindEventCode = 90;
+        private static readonly byte RewindEventCode = NetEventRegistry.GetCode("KojnerMod.Rewind");
 
         public string AbilityName => "CHRONO SHIFT";
         public float CooldownRemaining => Mathf.Max(0f, cooldownEndTime - Time.time);

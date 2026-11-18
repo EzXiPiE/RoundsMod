@@ -15,7 +15,7 @@ namespace RoundsMod.Components
         private CharacterData charData;
         private int maxOrbiters = 3;
         private float invulnUntil;
-        private const byte ShieldBreakCode = 92;
+        private static readonly byte ShieldBreakCode = NetEventRegistry.GetCode("KojnerMod.ShieldBreak");
 
         public void SetupShield(int count)
         {
@@ -49,10 +49,17 @@ namespace RoundsMod.Components
             if (orbiters.Count == 0) return false;
 
             invulnUntil = Time.time + 0.4f;
-            if (netView != null && netView.IsMine)
+            if (netView != null && PhotonNetwork.InRoom)
             {
-                var opts = new RaiseEventOptions { Receivers = ReceiverGroup.All };
-                PhotonNetwork.RaiseEvent(ShieldBreakCode, netView.ViewID, opts, SendOptions.SendReliable);
+                if (netView.IsMine)
+                {
+                    var opts = new RaiseEventOptions { Receivers = ReceiverGroup.All };
+                    PhotonNetwork.RaiseEvent(ShieldBreakCode, netView.ViewID, opts, SendOptions.SendReliable);
+                }
+            }
+            else
+            {
+                ConsumeOrbiter();
             }
             return true;
         }
@@ -63,18 +70,22 @@ namespace RoundsMod.Components
             if (netView == null || netView.ViewID != (int)photonEvent.CustomData) return;
 
             invulnUntil = Time.time + 0.4f;
-            if (orbiters.Count > 0)
+            ConsumeOrbiter();
+        }
+
+        private void ConsumeOrbiter()
+        {
+            if (orbiters.Count == 0) return;
+            int idx = orbiters.Count - 1;
+            GameObject target = orbiters[idx];
+            orbiters.RemoveAt(idx);
+            if (target != null)
             {
-                int idx = orbiters.Count - 1;
-                GameObject target = orbiters[idx];
-                orbiters.RemoveAt(idx);
-                if (target != null)
-                {
-                    SpawnShatterFx(target.transform.position);
-                    Destroy(target);
-                }
+                SpawnShatterFx(target.transform.position);
+                Destroy(target);
             }
         }
+
 
         private void Update()
         {

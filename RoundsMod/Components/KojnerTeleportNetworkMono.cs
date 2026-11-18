@@ -11,7 +11,7 @@ namespace RoundsMod.Components
         private Player cachedPlayer;
         private Block cachedBlock;
         private PhotonView photonView;
-        private const byte TeleportEventCode = 89;
+        private static readonly byte TeleportEventCode = RoundsMod.Utils.NetEventRegistry.GetCode("KojnerMod.Teleport");
         private bool isTeleporting;
 
         public void SetupTeleport(Player player, Block block)
@@ -33,11 +33,16 @@ namespace RoundsMod.Components
             if (MainCam.instance?.cam == null) return;
 
             Vector3 targetPos = GetSafeTeleportPos(MainCam.instance.cam.ScreenToWorldPoint(Input.mousePosition));
-            if (photonView != null)
+            if (photonView != null && PhotonNetwork.InRoom)
             {
                 object[] content = { photonView.ViewID, targetPos };
                 PhotonNetwork.RaiseEvent(TeleportEventCode, content, new RaiseEventOptions { Receivers = ReceiverGroup.All }, SendOptions.SendReliable);
             }
+            else
+            {
+                StartCoroutine(ExecuteTeleportRoutine(targetPos));
+            }
+
         }
 
         private Vector3 GetSafeTeleportPos(Vector3 rawPos)
